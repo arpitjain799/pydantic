@@ -3,6 +3,7 @@
 ```py output="json"
 import json
 from enum import Enum
+from typing import Union
 
 from typing_extensions import Annotated
 
@@ -12,7 +13,7 @@ from pydantic.config import ConfigDict
 
 class FooBar(BaseModel):
     count: int
-    size: float | None = None
+    size: Union[float, None] = None
 
 
 class Gender(str, Enum):
@@ -30,7 +31,7 @@ class MainModel(BaseModel):
     model_config = ConfigDict(title='Main')
 
     foo_bar: FooBar
-    gender: Annotated[Gender | None, Field(alias='Gender')]
+    gender: Annotated[Union[Gender, None], Field(alias='Gender')] = None
     snap: int = Field(
         42,
         title='The Snap',
@@ -56,7 +57,8 @@ print(json.dumps(MainModel.model_json_schema(), indent=2))
         {
           "type": "null"
         }
-      ]
+      ],
+      "default": null
     },
     "snap": {
       "type": "integer",
@@ -68,8 +70,7 @@ print(json.dumps(MainModel.model_json_schema(), indent=2))
     }
   },
   "required": [
-    "foo_bar",
-    "Gender"
+    "foo_bar"
   ],
   "title": "Main",
   "description": "\n    This is the description of the main model\n    ",
