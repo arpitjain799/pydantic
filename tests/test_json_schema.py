@@ -38,7 +38,7 @@ from pydantic import (
     ValidationError,
     field_validator,
 )
-from pydantic._internal._core_metadata import GetJsonSchemaHandler, build_metadata_dict
+from pydantic._internal._core_metadata import build_metadata_dict
 from pydantic.color import Color
 from pydantic.config import ConfigDict
 from pydantic.dataclasses import dataclass
@@ -46,6 +46,7 @@ from pydantic.errors import PydanticInvalidForJsonSchema
 from pydantic.json_schema import (
     DEFAULT_REF_TEMPLATE,
     GenerateJsonSchema,
+    GetJsonSchemaHandler,
     JsonSchemaValue,
     PydanticJsonSchemaWarning,
     model_json_schema,
@@ -265,7 +266,7 @@ def test_enum_modify_schema():
         bar = 'b'
 
         @classmethod
-        def __pydantic_modify_json_schema__(
+        def __get_pydantic_json_schema__(
             cls, core_schema: CoreSchema, handler: GetJsonSchemaHandler
         ) -> JsonSchemaValue:
             field_schema = handler(core_schema)
@@ -2100,7 +2101,7 @@ def test_schema_attributes():
 def test_path_modify_schema():
     class MyPath(Path):
         @classmethod
-        def __pydantic_modify_json_schema__(
+        def __get_pydantic_json_schema__(
             cls, core_schema: core_schema.CoreSchema, handler: GetJsonSchemaHandler
         ) -> JsonSchemaValue:
             schema = handler(core_schema)
@@ -2289,7 +2290,7 @@ def test_schema_for_generic_field():
         ) -> core_schema.PlainValidatorFunctionSchema:
             source_args = getattr(source, '__args__', [Any])
             param = source_args[0]
-            metadata = build_metadata_dict(js_function=lambda _c, h: h(handler(param)))
+            metadata = build_metadata_dict(js_functions=[lambda _c, h: h(handler(param))])
             return core_schema.general_plain_validator_function(
                 GenModel,
                 metadata=metadata,
@@ -2316,7 +2317,7 @@ def test_schema_for_generic_field():
 
     class GenModelModified(GenModel, Generic[T]):
         @classmethod
-        def __pydantic_modify_json_schema__(
+        def __get_pydantic_json_schema__(
             cls, core_schema: core_schema.CoreSchema, handler: GetJsonSchemaHandler
         ) -> JsonSchemaValue:
             field_schema = handler(core_schema)
@@ -2367,7 +2368,7 @@ def test_namedtuple_default():
     }
 
 
-def test_advanced_generic_schema():
+def test_advanced_generic_schema():  # noqa: C901
     T = TypeVar('T')
     K = TypeVar('K')
 
@@ -2388,19 +2389,28 @@ def test_advanced_generic_schema():
             cls, source: Any, handler: Callable[[Any], core_schema.CoreSchema]
         ) -> core_schema.CoreSchema:
             if hasattr(source, '__args__'):
-                param = source.__args__[0]
-                metadata = build_metadata_dict(js_function=lambda _c, h: h(handler(Optional[param])))
+                arg = source.__args__[0]
+
+                def js_func(s, h):
+                    # ignore the schema we were given and get a new CoreSchema
+                    s = handler(Optional[arg])
+                    return h(s)
+
                 return core_schema.general_plain_validator_function(
                     Gen,
-                    metadata=metadata,
+                    metadata={'pydantic_js_functions': [js_func]},
                 )
+            else:
+                return handler(source)
 
         @classmethod
-        def __pydantic_modify_json_schema__(
+        def __get_pydantic_json_schema__(
             cls, core_schema: core_schema.CoreSchema, handler: GetJsonSchemaHandler
         ) -> JsonSchemaValue:
-            # return {}
-            field_schema = {}
+            try:
+                field_schema = handler(core_schema)
+            except PydanticInvalidForJsonSchema:
+                field_schema = {}
             the_type = field_schema.pop('anyOf', [{'type': 'string'}])[0]
             field_schema.update(title='Gen title', anyOf=[the_type, {'type': 'array', 'items': the_type}])
             return field_schema
@@ -2423,7 +2433,8 @@ def test_advanced_generic_schema():
             cls, source: Any, handler: Callable[[Any], core_schema.CoreSchema], **_kwargs: Any
         ) -> core_schema.CoreSchema:
             if hasattr(source, '__args__'):
-                metadata = build_metadata_dict(js_function=lambda _c, h: h(handler(Tuple[source.__args__])))
+                # the js_function ignores the schema we were given and gets a new Tuple CoreSchema
+                metadata = build_metadata_dict(js_functions=[lambda _c, h: h(handler(Tuple[source.__args__]))])
                 return core_schema.general_plain_validator_function(
                     GenTwoParams,
                     metadata=metadata,
@@ -2431,7 +2442,7 @@ def test_advanced_generic_schema():
             return handler(source)
 
         @classmethod
-        def __pydantic_modify_json_schema__(
+        def __get_pydantic_json_schema__(
             cls, core_schema: core_schema.CoreSchema, handler: GetJsonSchemaHandler
         ) -> JsonSchemaValue:
             field_schema = handler(core_schema)
@@ -2445,9 +2456,12 @@ def test_advanced_generic_schema():
         B = 'b'
 
         @classmethod
-        def __pydantic_modify_json_schema__(cls, field_schema: core_schema.CoreSchema) -> core_schema.CoreSchema:
-            field_schema.update(title='CustomType title', type='string')
-            return field_schema
+        def __get_pydantic_json_schema__(
+            cls, core_schema: core_schema.CoreSchema, handler: GetJsonSchemaHandler
+        ) -> core_schema.CoreSchema:
+            json_schema = handler(core_schema)
+            json_schema.update(title='CustomType title', type='string')
+            return json_schema
 
     class Model(BaseModel):
         data0: Gen
@@ -2623,7 +2637,7 @@ def test_complex_nested_generic():
 def test_modify_schema_dict_keys() -> None:
     class MyType:
         @classmethod
-        def __pydantic_modify_json_schema__(
+        def __get_pydantic_json_schema__(
             cls, core_schema: core_schema.CoreSchema, handler: GetJsonSchemaHandler
         ) -> JsonSchemaValue:
             return {'test': 'passed'}
