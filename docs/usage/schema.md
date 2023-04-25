@@ -749,7 +749,7 @@ print(json.dumps(top_level_schema, indent=2))
 
 It's also possible to extend/override the generated JSON schema in a model.
 
-To do it, implement `__pydantic_modify_json_schema__` on your model:
+To do it, implement `__pydantic_get_json_schema__` on your model:
 
 For example, you could add `examples` to the JSON Schema:
 
@@ -765,7 +765,7 @@ class Person(BaseModel):
     age: int
 
     @classmethod
-    def __pydantic_modify_json_schema__(cls, schema: Dict[str, Any]) -> Dict[str, Any]:
+    def __pydantic_get_json_schema__(cls, schema: Dict[str, Any]) -> Dict[str, Any]:
         schema['examples'] = [
             {
                 'name': 'John Doe',
