@@ -12,10 +12,42 @@ CoreSchemaOrField = Union[core_schema.CoreSchema, core_schema.DataclassField, co
 
 
 class GetJsonSchemaHandler:
+    """
+    Handler to call into the next JSON schema generation function
+    """
+
     def __call__(self, __core_schema: CoreSchemaOrField) -> JsonSchemaValue:
+        """Call the inner handler and get the JsonSchemaValue it returns.
+        This will call the next JSON schema modifying function up until it calls
+        into `pydantic.json_schema.GenerateJsonSchema`, which will raise a
+        `pydantic.errors.PydanticInvalidForJsonSchema` error if it cannot generate
+        a JSON schema.
+
+        Args:
+            __core_schema (CoreSchemaOrField): A `pydantic_core.core_schema.CoreSchema`.
+
+        Raises:
+            NotImplementedError: _description_
+
+        Returns:
+            JsonSchemaValue: _description_
+        """
         raise NotImplementedError
 
     def resolve_ref_schema(self, __maybe_ref_json_schema: JsonSchemaValue) -> JsonSchemaValue:
+        """Get the real schema for a `{"$ref": ...}` schema.
+        If the schema given is not a `$ref` schema, it will be returned as is.
+        This means you don't have to check before calling this function.
+
+        Args:
+            __maybe_ref_json_schema (JsonSchemaValue): A JsonSchemaValue, ref based or not.
+
+        Raises:
+            LookupError: if the ref is not found.
+
+        Returns:
+            JsonSchemaValue: A JsonSchemaValue that has no `$ref`.
+        """
         raise NotImplementedError
 
 
